@@ -249,7 +249,8 @@ MissionFeasibilityChecker::checkMissionItemValidity(const mission_s &mission)
 		    missionitem.nav_cmd != NAV_CMD_DO_SET_CAM_TRIGG_DIST &&
 		    missionitem.nav_cmd != NAV_CMD_DO_SET_CAM_TRIGG_INTERVAL &&
 		    missionitem.nav_cmd != NAV_CMD_SET_CAMERA_MODE &&
-		    missionitem.nav_cmd != NAV_CMD_DO_VTOL_TRANSITION) {
+            missionitem.nav_cmd != NAV_CMD_DO_VTOL_TRANSITION &&
+            missionitem.nav_cmd != NAV_CMD_DO_SET_LANDZONE) {
 
 			mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: item %i: unsupported cmd: %d", (int)(i + 1),
 					     (int)missionitem.nav_cmd);
@@ -413,9 +414,11 @@ MissionFeasibilityChecker::checkFixedWingLanding(const mission_s &mission, bool 
 	bool landing_valid = false;
 
 	bool land_start_found = false;
-	size_t do_land_start_index = 0;
-	size_t landing_approach_index = 0;
+    size_t do_land_start_index = 0;
+    size_t landing_approach_index = 0;
+//    size_t landzone_count = 0;
 
+    //go through all mission items
 	for (size_t i = 0; i < mission.count; i++) {
 		struct mission_item_s missionitem;
 		const ssize_t len = sizeof(missionitem);
@@ -425,100 +428,46 @@ MissionFeasibilityChecker::checkFixedWingLanding(const mission_s &mission, bool 
 			return false;
 		}
 
-		// if DO_LAND_START found then require valid landing AFTER
-		if (missionitem.nav_cmd == NAV_CMD_DO_LAND_START) {
-			if (land_start_found) {
-				mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: more than one land start.");
-				return false;
+        // land start was found in mission
+        if (missionitem.nav_cmd == NAV_CMD_DO_LAND_START) {
+            //land start already found before
+            if (land_start_found) {
+                mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: more than one land start.");
+                return false;
+            //first time do_land_start was found
+            } else {
+                land_start_found = true;
+                do_land_start_index = i;
+            }
+        }
 
-			} else {
-				land_start_found = true;
-				do_land_start_index = i;
-			}
-		}
+        //land zone marker was found
+        if(missionitem.nav_cmd == NAV_CMD_DO_SET_LANDZONE){
 
-		if (missionitem.nav_cmd == NAV_CMD_LAND) {
-			mission_item_s missionitem_previous {};
+            //landzone maker comes before land start
+            if(!land_start_found){
+                mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: invalid landzone marker.");
+                return false;
+            }
 
-			if (i > 0) {
-				landing_approach_index = i - 1;
-
-				if (dm_read((dm_item_t)mission.dataman_id, landing_approach_index, &missionitem_previous, len) != len) {
-					/* not supposed to happen unless the datamanager can't access the SD card, etc. */
-					return false;
-				}
-
-				if (MissionBlock::item_contains_position(missionitem_previous)) {
-
-					uORB::Subscription<position_controller_landing_status_s> landing_status{ORB_ID(position_controller_landing_status)};
-					landing_status.forcedUpdate();
-
-					const bool landing_status_valid = (landing_status.get().timestamp > 0);
-					const float wp_distance = get_distance_to_next_waypoint(missionitem_previous.lat, missionitem_previous.lon,
-								  missionitem.lat, missionitem.lon);
-
-					if (landing_status_valid && (wp_distance > landing_status.get().flare_length)) {
-						/* Last wp is before flare region */
-
-						const float delta_altitude = missionitem.altitude - missionitem_previous.altitude;
-
-						if (delta_altitude < 0) {
-
-							const float horizontal_slope_displacement = landing_status.get().horizontal_slope_displacement;
-							const float slope_angle_rad = landing_status.get().slope_angle_rad;
-							const float slope_alt_req = Landingslope::getLandingSlopeAbsoluteAltitude(wp_distance, missionitem.altitude,
-										    horizontal_slope_displacement, slope_angle_rad);
-
-							if (missionitem_previous.altitude > slope_alt_req + 1.0f) {
-								/* Landing waypoint is above altitude of slope at the given waypoint distance (with small tolerance for floating point discrepancies) */
-								mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: adjust landing approach.");
-
-								const float wp_distance_req = Landingslope::getLandingSlopeWPDistance(missionitem_previous.altitude,
-											      missionitem.altitude, horizontal_slope_displacement, slope_angle_rad);
-
-								mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Move down %d m or move further away by %d m.",
-										     (int)ceilf(slope_alt_req - missionitem_previous.altitude),
-										     (int)ceilf(wp_distance_req - wp_distance));
-
-								return false;
-							}
-
-						} else {
-							/* Landing waypoint is above last waypoint */
-							mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: landing above last waypoint.");
-							return false;
-						}
-
-					} else {
-						/* Last wp is in flare region */
-						mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: waypoint within landing flare.");
-						return false;
-					}
-
-					landing_valid = true;
-
-				} else {
-					// mission item before land doesn't have a position
-					mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: need landing approach.");
-					return false;
-				}
-
-			} else {
-				mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: starts with land waypoint.");
-				return false;
-			}
-		}
+            else{
+                //count the number of landzone markers
+                landzone_count++;
+            }
+        }
 	}
 
+    //no land start was found, but is required
 	if (land_start_req && !land_start_found) {
 		mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: landing pattern required.");
 		return false;
 	}
 
-	if (land_start_found && (!landing_valid || (do_land_start_index > landing_approach_index))) {
-		mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: invalid land start.");
-		return false;
-	}
+    //we need at least 3 landzone markers for a valid landzone
+    if(land_start_found && (landzone_count < 3)){
+        mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: not enough landzone markers.");
+        return false;
+    }
 
 	/* No landing waypoints or no waypoints */
 	return true;

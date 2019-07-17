@@ -1409,6 +1409,11 @@ MavlinkMissionManager::parse_mavlink_mission_item(const mavlink_mission_item_t *
 			mission_item->nav_cmd = (NAV_CMD)mavlink_mission_item->command;
 			break;
 
+
+        case NAV_CMD_DO_SET_LANDZONE:
+            mission_item->nav_cmd = (NAV_CMD)mavlink_mission_item->command;
+            break;
+
 		default:
 			mission_item->nav_cmd = NAV_CMD_INVALID;
 
@@ -1474,6 +1479,11 @@ MavlinkMissionManager::parse_mavlink_mission_item(const mavlink_mission_item_t *
 		case MAV_CMD_DO_SET_ROI_NONE:
 			mission_item->nav_cmd = (NAV_CMD)mavlink_mission_item->command;
 			break;
+
+
+        case NAV_CMD_DO_SET_LANDZONE:
+            PX4_DEBUG("Test message (MAV_FRAME_MISSION)");
+            break;
 
 		default:
 			mission_item->nav_cmd = NAV_CMD_INVALID;

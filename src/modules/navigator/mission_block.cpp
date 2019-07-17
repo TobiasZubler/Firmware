@@ -426,6 +426,8 @@ MissionBlock::issue_command(const mission_item_s &item)
 
 	// NAV_CMD_DO_LAND_START is only a marker
 	if (item.nav_cmd == NAV_CMD_DO_LAND_START) {
+
+        	mavlink_log_info(_navigator->get_mavlink_log_pub(), "DO_LAND_START activated");
 		return;
 	}
 
@@ -501,7 +503,8 @@ MissionBlock::item_contains_position(const mission_item_s &item)
 	       item.nav_cmd == NAV_CMD_LOITER_TO_ALT ||
 	       item.nav_cmd == NAV_CMD_VTOL_TAKEOFF ||
 	       item.nav_cmd == NAV_CMD_VTOL_LAND ||
-	       item.nav_cmd == NAV_CMD_DO_FOLLOW_REPOSITION;
+           item.nav_cmd == NAV_CMD_DO_FOLLOW_REPOSITION ||
+           item.nav_cmd == NAV_CMD_DO_SET_LANDZONE;
 }
 
 bool
