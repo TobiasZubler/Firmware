@@ -1059,6 +1059,8 @@ Mission::set_mission_items()
 						     pos_sp_triplet->previous.lat, pos_sp_triplet->previous.lon);
 	}
 
+    	mavlink_log_info(_navigator->get_mavlink_log_pub(), "current nav_cmd: %d", _mission_item.nav_cmd);
+
 	_navigator->set_position_setpoint_triplet_updated();
 }
 
