@@ -145,6 +145,7 @@ public:
 	 * Check nearby traffic for potential collisions
 	 */
 	void		check_traffic();
+	void		check_traffic_conus();
 
 	/**
 	 * Setters
