@@ -411,12 +411,8 @@ MissionFeasibilityChecker::checkFixedWingLanding(const mission_s &mission, bool 
 	/* Go through all mission items and search for a landing waypoint
 	 * if landing waypoint is found: the previous waypoint is checked to be at a feasible distance and altitude given the landing slope */
 
-	bool landing_valid = false;
-
 	bool land_start_found = false;
-    size_t do_land_start_index = 0;
-    size_t landing_approach_index = 0;
-//    size_t landzone_count = 0;
+    size_t landzone_count = 0;
 
     //go through all mission items
 	for (size_t i = 0; i < mission.count; i++) {
@@ -437,14 +433,13 @@ MissionFeasibilityChecker::checkFixedWingLanding(const mission_s &mission, bool 
             //first time do_land_start was found
             } else {
                 land_start_found = true;
-                do_land_start_index = i;
             }
         }
 
         //land zone marker was found
         if(missionitem.nav_cmd == NAV_CMD_DO_SET_LANDZONE){
 
-            //landzone maker comes before land start
+            //landzone marker comes before land start
             if(!land_start_found){
                 mavlink_log_critical(_navigator->get_mavlink_log_pub(), "Mission rejected: invalid landzone marker.");
                 return false;
